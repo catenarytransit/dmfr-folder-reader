@@ -1,7 +1,7 @@
-use std::fs;
 use dmfr::*;
 use serde_json::Error as SerdeError;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -14,22 +14,162 @@ pub type FeedId = String;
 pub type OperatorId = String;
 
 pub struct ReturnDmfrAnalysis {
-    pub feedhashmap: HashMap<FeedId, dmfr::Feed>,
-    pub operatorhashmap: HashMap<OperatorId, dmfr::Operator>,
+    pub feed_hashmap: HashMap<FeedId, dmfr::Feed>,
+    pub operator_hashmap: HashMap<OperatorId, dmfr::Operator>,
     pub operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
-    pub feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>>
+    pub feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>>,
+}
+
+pub fn process_feed(
+    feed: &dmfr::Feed,
+    feed_hashmap: &mut HashMap<FeedId, dmfr::Feed>,
+    operator_hashmap: &mut HashMap<OperatorId, dmfr::Operator>,
+    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    feed_to_operator_pairs_hashmap: &mut HashMap<FeedId, Vec<OperatorPairInfo>>,
+) -> () {
+    feed_hashmap.entry(feed.id.clone()).or_insert(feed.clone());
+
+    for operator in feed.operators.iter() {
+        process_operator(
+            &operator,
+            feed_hashmap,
+            operator_hashmap,
+            operator_to_feed_hashmap,
+            feed_to_operator_pairs_hashmap,
+            Some(&feed.id),
+        );
+
+        operator_to_feed_hashmap
+            .entry(operator.onestop_id.clone())
+            .and_modify(|associated_feeds| {
+                let set_of_existing_ids: HashSet<&String> = HashSet::from_iter(
+                    associated_feeds
+                        .iter()
+                        .filter(|feed_item| feed_item.feed_onestop_id.is_some())
+                        .map(|feed_item| feed_item.feed_onestop_id.as_ref().unwrap()),
+                );
+
+                if !set_of_existing_ids.contains(&feed.id) {
+                    associated_feeds.push(dmfr::OperatorAssociatedFeedsItem {
+                        feed_onestop_id: Some(feed.id.clone()),
+                        gtfs_agency_id: None,
+                    });
+                }
+            })
+            .or_insert(vec![dmfr::OperatorAssociatedFeedsItem {
+                feed_onestop_id: Some(feed.id.clone()),
+                gtfs_agency_id: None,
+            }]);
+
+        feed_to_operator_pairs_hashmap
+            .entry(feed.id.clone())
+            .and_modify(|operator_pairs| {
+                let set_of_existing_operator_ids: HashSet<String> = HashSet::from_iter(
+                    operator_pairs
+                        .iter()
+                        .map(|operator_pair| operator_pair.operator_id.clone()),
+                );
+
+                if !set_of_existing_operator_ids.contains(&operator.onestop_id.clone()) {
+                    operator_pairs.push(OperatorPairInfo {
+                        operator_id: operator.onestop_id.clone(),
+                        gtfs_agency_id: None,
+                    });
+                }
+            })
+            .or_insert(vec![OperatorPairInfo {
+                operator_id: operator.onestop_id.clone(),
+                gtfs_agency_id: None,
+            }]);
+    }
+}
+
+pub fn process_operator(
+    operator: &dmfr::Operator,
+    feed_hashmap: &mut HashMap<FeedId, dmfr::Feed>,
+    operator_hashmap: &mut HashMap<OperatorId, dmfr::Operator>,
+    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    feed_to_operator_pairs_hashmap: &mut HashMap<FeedId, Vec<OperatorPairInfo>>,
+    parent_feed_id: Option<&str>,
+) -> () {
+    operator_hashmap
+        .entry(operator.onestop_id.clone())
+        .or_insert(operator.clone());
+
+    for associated_feed in operator.associated_feeds.iter() {
+        let mut associated_feed_insertion: dmfr::OperatorAssociatedFeedsItem =
+            associated_feed.clone();
+
+        if associated_feed_insertion.feed_onestop_id.is_none() {
+            if let Some(parent_feed_id) = parent_feed_id {
+                associated_feed_insertion.feed_onestop_id = Some(String::from(parent_feed_id));
+            }
+        }
+
+        //if associated_feed_insertion.feed_onestop_id == Some(String::from("f-ucla~bruinbus~rt")) {
+        //    println!("Bruin realtime feed found! {:?}", associated_feed_insertion);
+        //}
+
+        if associated_feed_insertion.feed_onestop_id.is_none() {
+            eprintln!("{} still no feed onestop id", operator.onestop_id);
+        } else {
+            operator_to_feed_hashmap
+                .entry(operator.onestop_id.clone())
+                .and_modify(|associated_feeds| {
+                    let set_of_existing_ids: HashSet<&String> = HashSet::from_iter(
+                        associated_feeds
+                            .iter()
+                            .filter(|feed_item| feed_item.feed_onestop_id.is_some())
+                            .map(|feed_item| feed_item.feed_onestop_id.as_ref().unwrap()),
+                    );
+
+                    if !set_of_existing_ids
+                        .contains(&associated_feed_insertion.feed_onestop_id.as_ref().unwrap())
+                    {
+                        associated_feeds.push(associated_feed.clone())
+                    }
+                })
+                .or_insert(vec![associated_feed.clone()]);
+
+            feed_to_operator_pairs_hashmap
+                .entry(
+                    associated_feed_insertion
+                        .feed_onestop_id
+                        .as_ref()
+                        .unwrap()
+                        .clone(),
+                )
+                .and_modify(|operator_pairs| {
+                    let set_of_existing_operator_ids: HashSet<String> = HashSet::from_iter(
+                        operator_pairs
+                            .iter()
+                            .map(|operator_pair| operator_pair.operator_id.clone()),
+                    );
+
+                    if !set_of_existing_operator_ids.contains(&operator.onestop_id.clone()) {
+                        operator_pairs.push(OperatorPairInfo {
+                            operator_id: operator.onestop_id.clone(),
+                            gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
+                        });
+                    }
+                })
+                .or_insert(vec![OperatorPairInfo {
+                    operator_id: operator.onestop_id.clone(),
+                    gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
+                }]);
+        }
+    }
 }
 
 pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
     let entries = fs::read_dir(path).expect("Transitland atlas missing");
 
-    let mut feedhashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
-    let mut operatorhashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
+    let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
+    let mut operator_hashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
     let mut operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>> =
         HashMap::new();
-    let mut feed_to_operator_hashmap: HashMap<FeedId, Vec<OperatorId>> = HashMap::new();
     let mut feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>> = HashMap::new();
-    
+
     for entry in entries {
         if let Ok(entry) = entry {
             if let Some(file_name) = entry.file_name().to_str() {
@@ -43,151 +183,26 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
                     serde_json::from_str(&contents.unwrap());
                 match dmfrinfo {
                     Ok(dmfrinfo) => {
-                        dmfrinfo.feeds.iter().for_each(|feed| {
-                            //for every operator in the file
-                            for operator in feed.operators.to_owned().into_iter() {
-                                if feed_to_operator_pairs_hashmap.contains_key(&feed.id) {
-                                    let mut existing_operator_pairs =
-                                        feed_to_operator_pairs_hashmap
-                                            .get(&feed.id)
-                                            .unwrap()
-                                            .to_owned();
-                                    existing_operator_pairs.push(OperatorPairInfo {
-                                        operator_id: operator.onestop_id.to_owned(),
-                                        gtfs_agency_id: None,
-                                    });
-                                    feed_to_operator_pairs_hashmap
-                                        .insert(feed.id.to_owned(), existing_operator_pairs);
-                                } else {
-                                    feed_to_operator_pairs_hashmap.insert(
-                                        feed.id.to_owned(),
-                                        vec![OperatorPairInfo {
-                                            operator_id: operator.onestop_id.to_owned(),
-                                            gtfs_agency_id: None,
-                                        }],
-                                    );
-                                }
+                        for feed in dmfrinfo.feeds.into_iter() {
+                            process_feed(
+                                &feed,
+                                &mut feed_hashmap,
+                                &mut operator_hashmap,
+                                &mut operator_to_feed_hashmap,
+                                &mut feed_to_operator_pairs_hashmap,
+                            );
+                        }
 
-                                feed_to_operator_hashmap
-                                    .entry(feed.id.to_owned())
-                                    .and_modify(|value| {
-                                        value.push(operator.onestop_id.to_owned())
-                                    })
-                                    .or_insert(vec![operator.onestop_id.to_owned()]);
-
-                                operator_to_feed_hashmap
-                                    .entry(operator.onestop_id)
-                                    .or_insert(vec![dmfr::OperatorAssociatedFeedsItem {
-                                        feed_onestop_id: Some(feed.id.to_owned()),
-                                        gtfs_agency_id: None,
-                                    }]);
-                            }
-                            //println!("Feed {}: {:#?}", feed.id.to_owned(), feed);
-                            feedhashmap
-                                .entry(feed.id.to_owned())
-                                .or_insert(feed.to_owned());
-
-                            for operator in feed.operators.iter() {
-                                operatorhashmap
-                                    .insert(operator.onestop_id.to_owned(), operator.to_owned());
-                                if operator_to_feed_hashmap.contains_key(&operator.onestop_id) {
-                                    //combine the feeds for this operator together
-                                    let mut existing_associated_feeds = operator_to_feed_hashmap
-                                        .get(&operator.onestop_id)
-                                        .unwrap()
-                                        .to_owned();
-                                    let existing_feed_ids = operator_to_feed_hashmap
-                                        .get(&operator.onestop_id)
-                                        .unwrap()
-                                        .iter()
-                                        .map(|associated_feed| {
-                                            associated_feed.feed_onestop_id.to_owned().unwrap()
-                                        })
-                                        .collect::<Vec<String>>();
-                                    operator
-                                        .associated_feeds
-                                        .iter()
-                                        .for_each(|associated_feed| {
-                                            if !existing_feed_ids.contains(
-                                                &associated_feed
-                                                    .feed_onestop_id
-                                                    .to_owned()
-                                                    .unwrap_or_else(|| feed.id.to_owned()),
-                                            ) {
-                                                existing_associated_feeds
-                                                    .push(associated_feed.to_owned());
-                                            }
-                                        });
-                                    operator_to_feed_hashmap.insert(
-                                        operator.onestop_id.to_owned(),
-                                        existing_associated_feeds,
-                                    );
-                                } else {
-                                    operator_to_feed_hashmap.insert(
-                                        operator.onestop_id.to_owned(),
-                                        operator.associated_feeds.to_owned(),
-                                    );
-                                }
-                            }
-                        });
-                        dmfrinfo.operators.iter().for_each(|operator| {
-                            operatorhashmap
-                                .insert(operator.onestop_id.to_owned(), operator.to_owned());
-                            for feed in operator.associated_feeds.iter() {
-                                if feed.feed_onestop_id.is_some() {
-                                    feed_to_operator_pairs_hashmap
-                                        .entry(feed.feed_onestop_id.as_ref().unwrap().to_owned())
-                                        .and_modify(|existing_operator_pairs| {
-                                            existing_operator_pairs.push(OperatorPairInfo {
-                                                operator_id: operator.onestop_id.to_owned(),
-                                                gtfs_agency_id: feed.gtfs_agency_id.to_owned(),
-                                            });
-                                        })
-                                        .or_insert(vec![OperatorPairInfo {
-                                            operator_id: operator.onestop_id.to_owned(),
-                                            gtfs_agency_id: feed.gtfs_agency_id.to_owned(),
-                                        }]);
-                                }
-                            }
-                            if operator_to_feed_hashmap.contains_key(&operator.onestop_id) {
-                                //combine the feeds for this operator together
-                                let mut existing_associated_feeds = operator_to_feed_hashmap
-                                    .get(&operator.onestop_id)
-                                    .unwrap()
-                                    .to_owned();
-                                let existing_feed_ids = operator_to_feed_hashmap
-                                    .get(&operator.onestop_id)
-                                    .unwrap()
-                                    .iter()
-                                    .filter(|associated_feed| {
-                                        associated_feed.feed_onestop_id.is_some()
-                                    })
-                                    .map(|associated_feed| {
-                                        associated_feed.feed_onestop_id.to_owned().unwrap()
-                                    })
-                                    .collect::<Vec<String>>();
-                                operator
-                                    .associated_feeds
-                                    .iter()
-                                    .for_each(|associated_feed| {
-                                        if !existing_feed_ids.contains(
-                                            &associated_feed.feed_onestop_id.to_owned().unwrap(),
-                                        ) {
-                                            existing_associated_feeds
-                                                .push(associated_feed.to_owned());
-                                        }
-                                    });
-                                operator_to_feed_hashmap.insert(
-                                    operator.onestop_id.to_owned(),
-                                    existing_associated_feeds,
-                                );
-                            } else {
-                                operator_to_feed_hashmap.insert(
-                                    operator.onestop_id.to_owned(),
-                                    operator.associated_feeds.to_owned(),
-                                );
-                            }
-                        });
+                        for operator in dmfrinfo.operators.into_iter() {
+                            process_operator(
+                                &operator,
+                                &mut feed_hashmap,
+                                &mut operator_hashmap,
+                                &mut operator_to_feed_hashmap,
+                                &mut feed_to_operator_pairs_hashmap,
+                                None,
+                            );
+                        }
                     }
                     Err(_) => {}
                 }
@@ -197,27 +212,11 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
 
     //cross check feed_to_operator_hashmap into feed_to_operator_pairs_hashmap
 
-    for (feed_id, operator_list) in feed_to_operator_hashmap {
-        if let Some(feed_operator_pairs_existing) = feed_to_operator_pairs_hashmap.get(&feed_id) {
-
-            let operator_list_set:HashSet<String> = HashSet::from_iter(operator_list.clone());
-
-            let feed_operator_pairs_existing_set: HashSet<String> = HashSet::from_iter(feed_operator_pairs_existing.clone().into_iter().map(|x| x.operator_id));
-
-            if operator_list_set != feed_operator_pairs_existing_set {
-                println!("{}: {:?} vs {:?}", feed_id, operator_list_set, feed_operator_pairs_existing_set);
-                
-            }
-        } else {
-            eprintln!("{} not found from plain to pairs!", feed_id);
-        }
-    }
-
     ReturnDmfrAnalysis {
-        feedhashmap,
-        operatorhashmap,
+        feed_hashmap,
+        operator_hashmap,
         operator_to_feed_hashmap,
-        feed_to_operator_pairs_hashmap
+        feed_to_operator_pairs_hashmap,
     }
 }
 
@@ -229,15 +228,42 @@ mod tests {
     fn test() {
         let dmfr_result = read_folders("transitland-atlas/feeds");
 
-        assert!(dmfr_result.feedhashmap.len() > 1000);
+        assert!(dmfr_result.feed_hashmap.len() > 1000);
 
-        println!("{} feeds across {} operators", dmfr_result.feedhashmap.len(), dmfr_result.operatorhashmap.len());
+        fs::write(
+            "operator_to_feed_hashmap.json",
+            format!("{:#?}", dmfr_result.operator_to_feed_hashmap),
+        )
+        .expect("Unable to write file");
 
-        println!("Operator to feed hashmap length {}", dmfr_result.operator_to_feed_hashmap.len());
-        println!("feed_to_operator_pairs_hashmap length {}", dmfr_result.feed_to_operator_pairs_hashmap.len());
+        fs::write(
+            "feed_to_operator_pairs_hashmap.json",
+            format!("{:#?}", dmfr_result.feed_to_operator_pairs_hashmap),
+        )
+        .expect("Unable to write file");
 
-        assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-bigbluebus~rt").is_some());
-        assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-ucla~bruinbus~rt").is_some());
-        assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-spokanetransitauthority~rt").is_some());
+        println!(
+            "{} feeds across {} operators",
+            dmfr_result.feed_hashmap.len(),
+            dmfr_result.operator_hashmap.len()
+        );
+
+        println!(
+            "Operator to feed hashmap length {}",
+            dmfr_result.operator_to_feed_hashmap.len()
+        );
+        println!(
+            "feed_to_operator_pairs_hashmap length {}",
+            dmfr_result.feed_to_operator_pairs_hashmap.len()
+        );
+
+        assert!(dmfr_result
+            .feed_to_operator_pairs_hashmap
+            .get("f-ucla~bruinbus~rt")
+            .is_some());
+        assert!(dmfr_result
+            .feed_to_operator_pairs_hashmap
+            .get("f-spokanetransitauthority~rt")
+            .is_some());
     }
 }
