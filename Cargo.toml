@@ -1,5 +1,5 @@
 [package]
-name = "dmfr_folder_reader"
+name = "dmfr-folder-reader"
 version = "0.1.0"
 edition = "2021"
 
