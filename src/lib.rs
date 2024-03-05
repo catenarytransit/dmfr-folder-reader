@@ -10,21 +10,14 @@ pub struct OperatorPairInfo {
     pub gtfs_agency_id: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Chateau {
-    chateau_name: String,
-    realtime_feeds: HashSet<String>,
-    static_feeds: HashSet<String>
-}
-
 pub type FeedId = String;
 pub type OperatorId = String;
 
 pub struct ReturnDmfrAnalysis {
-    feedhashmap: HashMap<FeedId, dmfr::Feed>,
-    operatorhashmap: HashMap<OperatorId, dmfr::Operator>,
-    operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
-    feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>>
+    pub feedhashmap: HashMap<FeedId, dmfr::Feed>,
+    pub operatorhashmap: HashMap<OperatorId, dmfr::Operator>,
+    pub operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    pub feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>>
 }
 
 pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
