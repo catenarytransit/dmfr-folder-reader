@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dmfr-folder-reader"
+name = "dmfr_folder_reader"
 version = "0.1.0"
 dependencies = [
  "dmfr",
