@@ -195,6 +195,24 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
         }
     }
 
+    //cross check feed_to_operator_hashmap into feed_to_operator_pairs_hashmap
+
+    for (feed_id, operator_list) in feed_to_operator_hashmap {
+        if let Some(feed_operator_pairs_existing) = feed_to_operator_pairs_hashmap.get(&feed_id) {
+
+            let operator_list_set:HashSet<String> = HashSet::from_iter(operator_list.clone());
+
+            let feed_operator_pairs_existing_set: HashSet<String> = HashSet::from_iter(feed_operator_pairs_existing.clone().into_iter().map(|x| x.operator_id));
+
+            if operator_list_set != feed_operator_pairs_existing_set {
+                println!("{}: {:?} vs {:?}", feed_id, operator_list_set, feed_operator_pairs_existing_set);
+                
+            }
+        } else {
+            eprintln!("{} not found from plain to pairs!", feed_id);
+        }
+    }
+
     ReturnDmfrAnalysis {
         feedhashmap,
         operatorhashmap,
@@ -219,5 +237,7 @@ mod tests {
         println!("feed_to_operator_pairs_hashmap length {}", dmfr_result.feed_to_operator_pairs_hashmap.len());
 
         assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-bigbluebus~rt").is_some());
+        assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-ucla~bruinbus~rt").is_some());
+        assert!(dmfr_result.feed_to_operator_pairs_hashmap.get("f-spokanetransitauthority~rt").is_some());
     }
 }
