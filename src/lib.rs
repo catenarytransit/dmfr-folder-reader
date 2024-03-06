@@ -10,13 +10,19 @@ pub struct OperatorPairInfo {
     pub gtfs_agency_id: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct FeedPairInfo {
+    pub feed_onestop_id: String,
+    pub gtfs_agency_id: Option<String>
+}
+
 pub type FeedId = String;
 pub type OperatorId = String;
 
 pub struct ReturnDmfrAnalysis {
     pub feed_hashmap: HashMap<FeedId, dmfr::Feed>,
     pub operator_hashmap: HashMap<OperatorId, dmfr::Operator>,
-    pub operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    pub operator_to_feed_hashmap: HashMap<OperatorId, Vec<FeedPairInfo>>,
     pub feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>>,
 }
 
@@ -24,7 +30,7 @@ pub fn process_feed(
     feed: &dmfr::Feed,
     feed_hashmap: &mut HashMap<FeedId, dmfr::Feed>,
     operator_hashmap: &mut HashMap<OperatorId, dmfr::Operator>,
-    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<FeedPairInfo>>,
     feed_to_operator_pairs_hashmap: &mut HashMap<FeedId, Vec<OperatorPairInfo>>,
 ) -> () {
     feed_hashmap.entry(feed.id.clone()).or_insert(feed.clone());
@@ -42,22 +48,21 @@ pub fn process_feed(
         operator_to_feed_hashmap
             .entry(operator.onestop_id.clone())
             .and_modify(|associated_feeds| {
-                let set_of_existing_ids: HashSet<&String> = HashSet::from_iter(
+                let set_of_existing_ids: HashSet<String> = HashSet::from_iter(
                     associated_feeds
                         .iter()
-                        .filter(|feed_item| feed_item.feed_onestop_id.is_some())
-                        .map(|feed_item| feed_item.feed_onestop_id.as_ref().unwrap()),
+                        .map(|feed_item| feed_item.feed_onestop_id.clone()),
                 );
 
                 if !set_of_existing_ids.contains(&feed.id) {
-                    associated_feeds.push(dmfr::OperatorAssociatedFeedsItem {
-                        feed_onestop_id: Some(feed.id.clone()),
+                    associated_feeds.push(FeedPairInfo {
+                        feed_onestop_id: feed.id.clone(),
                         gtfs_agency_id: None,
                     });
                 }
             })
-            .or_insert(vec![dmfr::OperatorAssociatedFeedsItem {
-                feed_onestop_id: Some(feed.id.clone()),
+            .or_insert(vec![FeedPairInfo {
+                feed_onestop_id: feed.id.clone(),
                 gtfs_agency_id: None,
             }]);
 
@@ -88,7 +93,7 @@ pub fn process_operator(
     operator: &dmfr::Operator,
     feed_hashmap: &mut HashMap<FeedId, dmfr::Feed>,
     operator_hashmap: &mut HashMap<OperatorId, dmfr::Operator>,
-    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>>,
+    operator_to_feed_hashmap: &mut HashMap<OperatorId, Vec<FeedPairInfo>>,
     feed_to_operator_pairs_hashmap: &mut HashMap<FeedId, Vec<OperatorPairInfo>>,
     parent_feed_id: Option<&str>,
 ) -> () {
@@ -97,47 +102,47 @@ pub fn process_operator(
         .or_insert(operator.clone());
 
     for associated_feed in operator.associated_feeds.iter() {
-        let mut associated_feed_insertion: dmfr::OperatorAssociatedFeedsItem =
-            associated_feed.clone();
-
-        if associated_feed_insertion.feed_onestop_id.is_none() {
-            if let Some(parent_feed_id) = parent_feed_id {
-                associated_feed_insertion.feed_onestop_id = Some(String::from(parent_feed_id));
+        let mut associated_feed_insertion: FeedPairInfo = match associated_feed.feed_onestop_id.as_ref() {
+            Some(feed_onestop_id) => {
+                FeedPairInfo {
+                    feed_onestop_id: feed_onestop_id.clone(),
+                    gtfs_agency_id: associated_feed.feed_onestop_id.clone()
+                }
+            },
+            None => {
+                FeedPairInfo {
+                    feed_onestop_id: String::from(parent_feed_id.as_ref().unwrap().clone()),
+                    gtfs_agency_id: associated_feed.feed_onestop_id.clone()
+                }
             }
-        }
+        };
 
         //if associated_feed_insertion.feed_onestop_id == Some(String::from("f-ucla~bruinbus~rt")) {
         //    println!("Bruin realtime feed found! {:?}", associated_feed_insertion);
         //}
 
-        if associated_feed_insertion.feed_onestop_id.is_none() {
-            eprintln!("{} still no feed onestop id", operator.onestop_id);
-        } else {
+        
             operator_to_feed_hashmap
                 .entry(operator.onestop_id.clone())
                 .and_modify(|associated_feeds| {
-                    let set_of_existing_ids: HashSet<&String> = HashSet::from_iter(
+                    let set_of_existing_ids: HashSet<String> = HashSet::from_iter(
                         associated_feeds
                             .iter()
-                            .filter(|feed_item| feed_item.feed_onestop_id.is_some())
-                            .map(|feed_item| feed_item.feed_onestop_id.as_ref().unwrap()),
+                            .map(|feed_item| feed_item.feed_onestop_id.clone()),
                     );
 
                     if !set_of_existing_ids
-                        .contains(&associated_feed_insertion.feed_onestop_id.as_ref().unwrap())
+                        .contains(&associated_feed_insertion.feed_onestop_id)
                     {
-                        associated_feeds.push(associated_feed.clone())
+                        associated_feeds.push(associated_feed_insertion.clone())
                     }
                 })
-                .or_insert(vec![associated_feed.clone()]);
+                .or_insert(vec![associated_feed_insertion.clone()]);
 
             feed_to_operator_pairs_hashmap
                 .entry(
                     associated_feed_insertion
-                        .feed_onestop_id
-                        .as_ref()
-                        .unwrap()
-                        .clone(),
+                        .feed_onestop_id.clone(),
                 )
                 .and_modify(|operator_pairs| {
                     let set_of_existing_operator_ids: HashSet<String> = HashSet::from_iter(
@@ -157,7 +162,7 @@ pub fn process_operator(
                     operator_id: operator.onestop_id.clone(),
                     gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
                 }]);
-        }
+        
     }
 }
 
@@ -166,7 +171,7 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
 
     let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
     let mut operator_hashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
-    let mut operator_to_feed_hashmap: HashMap<OperatorId, Vec<dmfr::OperatorAssociatedFeedsItem>> =
+    let mut operator_to_feed_hashmap: HashMap<OperatorId, Vec<FeedPairInfo>> =
         HashMap::new();
     let mut feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>> = HashMap::new();
 
