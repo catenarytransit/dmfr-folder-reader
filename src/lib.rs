@@ -111,7 +111,7 @@ pub fn process_operator(
             },
             None => {
                 FeedPairInfo {
-                    feed_onestop_id: String::from(parent_feed_id.as_ref().unwrap().clone()),
+                    feed_onestop_id: String::from(*parent_feed_id.as_ref().unwrap()),
                     gtfs_agency_id: associated_feed.feed_onestop_id.clone()
                 }
             }
