@@ -180,7 +180,7 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
                 //println!("{}", file_name);
                 let contents = fs::read_to_string(format!("{}/feeds/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading File: {}", contents.unwrap_err());
+                    eprintln!("Error Reading Feed File {}: {}", file_name, contents.unwrap_err());
                     continue;
                 }
                 let dmfrinfo: Result<dmfr::DistributedMobilityFeedRegistry, SerdeError> =
@@ -221,7 +221,7 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
             if let Some(file_name) = operator_file.file_name().to_str() {
                 let contents = fs::read_to_string(format!("{}/operators/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading File: {}", contents.unwrap_err());
+                    eprintln!("Error Reading Operator File {}: {}", file_name, contents.unwrap_err());
                     continue;
                 }
 
@@ -249,7 +249,7 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
             if let Some(file_name) = operator_file.file_name().to_str() {
                 let contents = fs::read_to_string(format!("{}/operators/switzerland/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading File: {}", contents.unwrap_err());
+                    eprintln!("Error Reading Swiss Operator File {}: {}", file_name, contents.unwrap_err());
                     continue;
                 }
 
