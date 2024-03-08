@@ -120,7 +120,6 @@ pub fn process_operator(
         //if associated_feed_insertion.feed_onestop_id == Some(String::from("f-ucla~bruinbus~rt")) {
         //    println!("Bruin realtime feed found! {:?}", associated_feed_insertion);
         //}
-
         
             operator_to_feed_hashmap
                 .entry(operator.onestop_id.clone())
@@ -167,7 +166,7 @@ pub fn process_operator(
 }
 
 pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
-    let entries = fs::read_dir(path).expect("Transitland atlas missing");
+    let feed_entries = fs::read_dir(format!("{}/feeds/", path)).expect("Transitland atlas missing");
 
     let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
     let mut operator_hashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
@@ -175,11 +174,11 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
         HashMap::new();
     let mut feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>> = HashMap::new();
 
-    for entry in entries {
+    for entry in feed_entries {
         if let Ok(entry) = entry {
             if let Some(file_name) = entry.file_name().to_str() {
                 //println!("{}", file_name);
-                let contents = fs::read_to_string(format!("{}/{}", path, file_name));
+                let contents = fs::read_to_string(format!("{}/feeds/{}", path, file_name));
                 if contents.is_err() {
                     eprintln!("Error Reading File: {}", contents.unwrap_err());
                     continue;
@@ -215,6 +214,62 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
         }
     }
 
+    let operator_entries = fs::read_dir(format!("{}/operators/", path)).expect("Transitland atlas missing");
+
+    for operator_file in operator_entries {
+        if let Ok(operator_file) = operator_file {
+            if let Some(file_name) = operator_file.file_name().to_str() {
+                let contents = fs::read_to_string(format!("{}/operators/{}", path, file_name));
+                if contents.is_err() {
+                    eprintln!("Error Reading File: {}", contents.unwrap_err());
+                    continue;
+                }
+
+                let operator: Result<dmfr::Operator, SerdeError> =
+                    serde_json::from_str(&contents.unwrap());
+
+                if let Ok(operator) = operator {
+                    process_operator(
+                        &operator,
+                        &mut feed_hashmap,
+                        &mut operator_hashmap,
+                        &mut operator_to_feed_hashmap,
+                        &mut feed_to_operator_pairs_hashmap,
+                        None,
+                    );
+                }
+            }
+        }
+    }
+
+    let operator_entries = fs::read_dir(format!("{}/operators/switzerland/", path)).expect("Transitland atlas missing");
+
+    for operator_file in operator_entries {
+        if let Ok(operator_file) = operator_file {
+            if let Some(file_name) = operator_file.file_name().to_str() {
+                let contents = fs::read_to_string(format!("{}/operators/switzerland/{}", path, file_name));
+                if contents.is_err() {
+                    eprintln!("Error Reading File: {}", contents.unwrap_err());
+                    continue;
+                }
+
+                let operator: Result<dmfr::Operator, SerdeError> =
+                    serde_json::from_str(&contents.unwrap());
+
+                if let Ok(operator) = operator {
+                    process_operator(
+                        &operator,
+                        &mut feed_hashmap,
+                        &mut operator_hashmap,
+                        &mut operator_to_feed_hashmap,
+                        &mut feed_to_operator_pairs_hashmap,
+                        None,
+                    );
+                }
+            }
+        }
+    }
+
     //cross check feed_to_operator_hashmap into feed_to_operator_pairs_hashmap
 
     ReturnDmfrAnalysis {
@@ -231,7 +286,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let dmfr_result = read_folders("transitland-atlas/feeds");
+        let dmfr_result = read_folders("transitland-atlas/");
 
         assert!(dmfr_result.feed_hashmap.len() > 1000);
 
