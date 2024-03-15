@@ -1,3 +1,4 @@
+use std::error::Error;
 use dmfr::*;
 use serde_json::Error as SerdeError;
 use std::collections::{HashMap, HashSet};
@@ -165,8 +166,8 @@ pub fn process_operator(
     }
 }
 
-pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
-    let feed_entries = fs::read_dir(format!("{}/feeds/", path)).expect("Transitland atlas missing");
+pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
+    let feed_entries = fs::read_dir(format!("{}/feeds/", path))?;
 
     let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
     let mut operator_hashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
@@ -272,12 +273,12 @@ pub fn read_folders(path: &str) -> ReturnDmfrAnalysis {
 
     //cross check feed_to_operator_hashmap into feed_to_operator_pairs_hashmap
 
-    ReturnDmfrAnalysis {
+    Ok(ReturnDmfrAnalysis {
         feed_hashmap,
         operator_hashmap,
         operator_to_feed_hashmap,
         feed_to_operator_pairs_hashmap,
-    }
+    })
 }
 
 #[cfg(test)]
