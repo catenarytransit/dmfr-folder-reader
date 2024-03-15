@@ -1,7 +1,7 @@
-use std::error::Error;
 use dmfr::*;
 use serde_json::Error as SerdeError;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 
@@ -14,7 +14,7 @@ pub struct OperatorPairInfo {
 #[derive(Debug, Clone)]
 pub struct FeedPairInfo {
     pub feed_onestop_id: String,
-    pub gtfs_agency_id: Option<String>
+    pub gtfs_agency_id: Option<String>,
 }
 
 pub type FeedId = String;
@@ -103,66 +103,57 @@ pub fn process_operator(
         .or_insert(operator.clone());
 
     for associated_feed in operator.associated_feeds.iter() {
-        let mut associated_feed_insertion: FeedPairInfo = match associated_feed.feed_onestop_id.as_ref() {
-            Some(feed_onestop_id) => {
-                FeedPairInfo {
+        let mut associated_feed_insertion: FeedPairInfo =
+            match associated_feed.feed_onestop_id.as_ref() {
+                Some(feed_onestop_id) => FeedPairInfo {
                     feed_onestop_id: feed_onestop_id.clone(),
-                    gtfs_agency_id: associated_feed.feed_onestop_id.clone()
-                }
-            },
-            None => {
-                FeedPairInfo {
+                    gtfs_agency_id: associated_feed.feed_onestop_id.clone(),
+                },
+                None => FeedPairInfo {
                     feed_onestop_id: String::from(*parent_feed_id.as_ref().unwrap()),
-                    gtfs_agency_id: associated_feed.feed_onestop_id.clone()
-                }
-            }
-        };
+                    gtfs_agency_id: associated_feed.feed_onestop_id.clone(),
+                },
+            };
 
         //if associated_feed_insertion.feed_onestop_id == Some(String::from("f-ucla~bruinbus~rt")) {
         //    println!("Bruin realtime feed found! {:?}", associated_feed_insertion);
         //}
-        
-            operator_to_feed_hashmap
-                .entry(operator.onestop_id.clone())
-                .and_modify(|associated_feeds| {
-                    let set_of_existing_ids: HashSet<String> = HashSet::from_iter(
-                        associated_feeds
-                            .iter()
-                            .map(|feed_item| feed_item.feed_onestop_id.clone()),
-                    );
 
-                    if !set_of_existing_ids
-                        .contains(&associated_feed_insertion.feed_onestop_id)
-                    {
-                        associated_feeds.push(associated_feed_insertion.clone())
-                    }
-                })
-                .or_insert(vec![associated_feed_insertion.clone()]);
+        operator_to_feed_hashmap
+            .entry(operator.onestop_id.clone())
+            .and_modify(|associated_feeds| {
+                let set_of_existing_ids: HashSet<String> = HashSet::from_iter(
+                    associated_feeds
+                        .iter()
+                        .map(|feed_item| feed_item.feed_onestop_id.clone()),
+                );
 
-            feed_to_operator_pairs_hashmap
-                .entry(
-                    associated_feed_insertion
-                        .feed_onestop_id.clone(),
-                )
-                .and_modify(|operator_pairs| {
-                    let set_of_existing_operator_ids: HashSet<String> = HashSet::from_iter(
-                        operator_pairs
-                            .iter()
-                            .map(|operator_pair| operator_pair.operator_id.clone()),
-                    );
+                if !set_of_existing_ids.contains(&associated_feed_insertion.feed_onestop_id) {
+                    associated_feeds.push(associated_feed_insertion.clone())
+                }
+            })
+            .or_insert(vec![associated_feed_insertion.clone()]);
 
-                    if !set_of_existing_operator_ids.contains(&operator.onestop_id.clone()) {
-                        operator_pairs.push(OperatorPairInfo {
-                            operator_id: operator.onestop_id.clone(),
-                            gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
-                        });
-                    }
-                })
-                .or_insert(vec![OperatorPairInfo {
-                    operator_id: operator.onestop_id.clone(),
-                    gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
-                }]);
-        
+        feed_to_operator_pairs_hashmap
+            .entry(associated_feed_insertion.feed_onestop_id.clone())
+            .and_modify(|operator_pairs| {
+                let set_of_existing_operator_ids: HashSet<String> = HashSet::from_iter(
+                    operator_pairs
+                        .iter()
+                        .map(|operator_pair| operator_pair.operator_id.clone()),
+                );
+
+                if !set_of_existing_operator_ids.contains(&operator.onestop_id.clone()) {
+                    operator_pairs.push(OperatorPairInfo {
+                        operator_id: operator.onestop_id.clone(),
+                        gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
+                    });
+                }
+            })
+            .or_insert(vec![OperatorPairInfo {
+                operator_id: operator.onestop_id.clone(),
+                gtfs_agency_id: associated_feed_insertion.gtfs_agency_id.clone(),
+            }]);
     }
 }
 
@@ -171,8 +162,7 @@ pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
 
     let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
     let mut operator_hashmap: HashMap<OperatorId, dmfr::Operator> = HashMap::new();
-    let mut operator_to_feed_hashmap: HashMap<OperatorId, Vec<FeedPairInfo>> =
-        HashMap::new();
+    let mut operator_to_feed_hashmap: HashMap<OperatorId, Vec<FeedPairInfo>> = HashMap::new();
     let mut feed_to_operator_pairs_hashmap: HashMap<FeedId, Vec<OperatorPairInfo>> = HashMap::new();
 
     for entry in feed_entries {
@@ -181,7 +171,11 @@ pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
                 //println!("{}", file_name);
                 let contents = fs::read_to_string(format!("{}/feeds/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading Feed File {}: {}", file_name, contents.unwrap_err());
+                    eprintln!(
+                        "Error Reading Feed File {}: {}",
+                        file_name,
+                        contents.unwrap_err()
+                    );
                     continue;
                 }
                 let dmfrinfo: Result<dmfr::DistributedMobilityFeedRegistry, SerdeError> =
@@ -215,14 +209,19 @@ pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
         }
     }
 
-    let operator_entries = fs::read_dir(format!("{}/operators/", path)).expect("Transitland atlas missing");
+    let operator_entries =
+        fs::read_dir(format!("{}/operators/", path)).expect("Transitland atlas missing");
 
     for operator_file in operator_entries {
         if let Ok(operator_file) = operator_file {
             if let Some(file_name) = operator_file.file_name().to_str() {
                 let contents = fs::read_to_string(format!("{}/operators/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading Operator File {}: {}", file_name, contents.unwrap_err());
+                    eprintln!(
+                        "Error Reading Operator File {}: {}",
+                        file_name,
+                        contents.unwrap_err()
+                    );
                     continue;
                 }
 
@@ -243,14 +242,20 @@ pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
         }
     }
 
-    let operator_entries = fs::read_dir(format!("{}/operators/switzerland/", path)).expect("Transitland atlas missing");
+    let operator_entries = fs::read_dir(format!("{}/operators/switzerland/", path))
+        .expect("Transitland atlas missing");
 
     for operator_file in operator_entries {
         if let Ok(operator_file) = operator_file {
             if let Some(file_name) = operator_file.file_name().to_str() {
-                let contents = fs::read_to_string(format!("{}/operators/switzerland/{}", path, file_name));
+                let contents =
+                    fs::read_to_string(format!("{}/operators/switzerland/{}", path, file_name));
                 if contents.is_err() {
-                    eprintln!("Error Reading Swiss Operator File {}: {}", file_name, contents.unwrap_err());
+                    eprintln!(
+                        "Error Reading Swiss Operator File {}: {}",
+                        file_name,
+                        contents.unwrap_err()
+                    );
                     continue;
                 }
 
