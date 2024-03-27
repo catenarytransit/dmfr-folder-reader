@@ -1,3 +1,7 @@
+/// Copyright: Kyler Chin <kyler@catenarymaps.org>
+/// Catenary Transit Initiatives
+/// Removal of the attribution is not allowed, as covered under the AGPL license
+
 use dmfr::*;
 use serde_json::Error as SerdeError;
 use std::collections::{HashMap, HashSet};
@@ -157,7 +161,7 @@ pub fn process_operator(
     }
 }
 
-pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error>> {
+pub fn read_folders(path: &str) -> Result<ReturnDmfrAnalysis, Box<dyn Error + Send + Sync>> {
     let feed_entries = fs::read_dir(format!("{}/feeds/", path))?;
 
     let mut feed_hashmap: HashMap<FeedId, dmfr::Feed> = HashMap::new();
